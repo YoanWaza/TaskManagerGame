@@ -1,7 +1,11 @@
 package ui;
 
+import core.AgentRegistry;
+import core.Observer;
+import family.Agent;
 import observers.TaskObserver;
 import tasks.Task;
+import tasks.AbstractTask;
 
 import javax.swing.*;
 import java.awt.*;
@@ -14,6 +18,11 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
     private final Task task;
     private final JProgressBar progress;
     private final JLabel label;
+    private final JPanel buttons;
+
+    private final JButton startBtn;
+    private final JButton pauseBtn;
+    private final JButton cancelBtn;
 
     public TaskBoxPanel(String memberName, Task task) {
         this.memberName = memberName;
@@ -22,29 +31,73 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
         setLayout(new BorderLayout());
 
         label = new JLabel();
-        updateLabelText(); // Sets the initial label text
+        updateLabelText();
         add(label, BorderLayout.NORTH);
 
         progress = new JProgressBar(0, task.getOriginalDuration());
         progress.setStringPainted(true);
         add(progress, BorderLayout.CENTER);
 
-        JPanel buttons = new JPanel();
-        JButton startBtn = new JButton("Start");
-        JButton pauseBtn = new JButton("Pause");
-        JButton cancelBtn = new JButton("Cancel");
+        buttons = new JPanel();
+
+        startBtn = new JButton("Start");
+        pauseBtn = new JButton("Pause");
+        cancelBtn = new JButton("Cancel");
+
+        pauseBtn.setEnabled(false); // Can't pause until running
+
         buttons.add(startBtn);
         buttons.add(pauseBtn);
         buttons.add(cancelBtn);
         add(buttons, BorderLayout.SOUTH);
 
         startBtn.addActionListener(e -> {
-            if (!core.GameClock.isSessionOver()) task.start(memberName);
-            else JOptionPane.showMessageDialog(this, "Session is over!");
+            if (core.GameClock.isSessionOver()) {
+                JOptionPane.showMessageDialog(this, "Session is over!");
+                return;
+            }
+
+            Agent agent = AgentRegistry.get(memberName);
+
+            if (agent.isAutomatic() && Observer.getInstance().isMemberBusy(memberName)
+                    && !task.getName().equals("Be Happy")) {
+                JOptionPane.showMessageDialog(this, "Agent is already doing a task. Only 'Be Happy' can run simultaneously.");
+                return;
+            }
+
+            if (task instanceof AbstractTask absTask) {
+                if (absTask.isPaused()) {
+                    absTask.resume();
+                } else {
+                    absTask.start(memberName);
+                }
+            } else {
+                task.start(memberName);
+            }
+
+            startBtn.setEnabled(false);
+            pauseBtn.setEnabled(true);
+
+            agent.switchToAutomaticMode();
+            synchronized (agent) {
+                agent.notify();
+            }
         });
 
-        pauseBtn.addActionListener(e -> task.pause());
-        cancelBtn.addActionListener(e -> task.cancel());
+        pauseBtn.addActionListener(e -> {
+            task.pause();
+            pauseBtn.setEnabled(false);
+            startBtn.setEnabled(true);
+            AgentRegistry.get(memberName).switchToManualMode();
+        });
+
+        cancelBtn.addActionListener(e -> {
+            task.cancel();
+            progress.setForeground(Color.RED);
+            progress.setString(task.getName() + " – canceled");
+            Observer.getInstance().markTaskCancelled(memberName, task.getName());
+            disableButtons(buttons);
+        });
 
         task.addObserver(this);
     }
@@ -55,7 +108,7 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
         if (!task.isShared()) {
             label.setText(base + " (can't be shared)");
         } else {
-            Set<String> participants = core.Observer.getInstance().getParticipants(task.getName());
+            Set<String> participants = Observer.getInstance().getParticipants(task.getName());
             List<String> others = participants.stream()
                     .filter(name -> !name.equals(memberName))
                     .collect(Collectors.toList());
@@ -68,14 +121,59 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
         }
     }
 
+    private void disableButtons(JPanel buttonsPanel) {
+        for (Component comp : buttonsPanel.getComponents()) {
+            if (comp instanceof JButton button) {
+                button.setEnabled(false);
+            }
+        }
+    }
+
     @Override
     public void update(String taskName, int timeLeft) {
         SwingUtilities.invokeLater(() -> {
-            int remaining = Math.max(0, timeLeft);
+            if (Observer.getInstance().isTaskCancelled(memberName, task.getName())) {
+                progress.setValue(0);
+                progress.setForeground(Color.RED);
+                progress.setString(task.getName() + " – canceled");
+                disableButtons(buttons);
+                return;
+            }
+
+            int remaining = task.isShared()
+                    ? Observer.getInstance().getSharedRemainingTime(task.getName())
+                    : Math.max(0, timeLeft);
+
             progress.setMaximum(task.getOriginalDuration());
-            progress.setValue(task.getOriginalDuration() - remaining);
-            progress.setString(taskName + ": " + remaining + "s left");
-            updateLabelText(); // Refresh shared info next to name
+
+            if (timeLeft == -1) {
+                progress.setValue(0);
+                progress.setForeground(Color.RED);
+                progress.setString(taskName + " – canceled");
+                disableButtons(buttons);
+            } else if (remaining == 0) {
+                progress.setValue(task.getOriginalDuration());
+                progress.setForeground(Color.GREEN);
+                progress.setString(taskName + " – completed");
+                disableButtons(buttons);
+            } else {
+                progress.setValue(task.getOriginalDuration() - remaining);
+                progress.setForeground(UIManager.getColor("ProgressBar.foreground"));
+                progress.setString(taskName + ": " + remaining + "s left");
+
+                // Lock/unlock Start/Pause buttons based on task state
+                if (task instanceof AbstractTask absTask) {
+                    if (absTask.isPaused()) {
+                        startBtn.setEnabled(true);
+                        pauseBtn.setEnabled(false);
+                    } else {
+                        startBtn.setEnabled(false);
+                        pauseBtn.setEnabled(true);
+                    }
+                }
+            }
+
+            updateLabelText();
         });
     }
 }

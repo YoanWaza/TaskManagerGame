@@ -9,16 +9,16 @@ public class TaskFactory {
         List<Task> pool = getEligibleTasksFor(memberName);
         List<Task> selected = new ArrayList<>();
 
-        if (memberName.equals("Mom") || memberName.equals("Dad")) {
-            // Add complex task first for parents
-        	Task doShop = new DoShoppingTask();
-            Task cook = new CookTask();
-            doShop.markShared();
-            cook.markShared();
-            selected.add(createComplexTask("ParentRoutine", List.of(
-                doShop, cook
-            )));
-        }
+//        if (memberName.equals("Mom") || memberName.equals("Dad")) {
+//            // Add complex task first for parents
+//        	Task doShop = new DoShoppingTask();
+//            Task cook = new CookTask();
+//            doShop.markShared();
+//            cook.markShared();
+//            selected.add(createComplexTask("ParentRoutine", List.of(
+//                doShop, cook
+//            )));
+//        }
 
         // Shuffle and select 3 additional tasks (excluding complex one if added)
         Collections.shuffle(pool);
@@ -42,11 +42,11 @@ public class TaskFactory {
             list.add(new FeedDogTask());
             list.add(new HouseholdTask());
             
-//            Task doShop = new DoShoppingTask();
-//            Task cook = new CookTask();
-//            doShop.markShared();
-//            cook.markShared();
-//            list.add(createComplexTask("ParentRoutine", List.of(doShop, cook)));
+            Task doShop = new DoShoppingTask();
+            Task cook = new CookTask();
+            doShop.markShared();
+            cook.markShared();
+            list.add(createComplexTask("ParentRoutine", List.of(doShop, cook)));
         }
 
         // Group A (Brother, Sister)

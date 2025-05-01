@@ -1,6 +1,7 @@
 package core;
 
 import tasks.Task;
+import tasks.AbstractTask;
 
 import java.util.*;
 
@@ -15,20 +16,17 @@ public class Observer {
     private final Map<String, Integer> taskPointers = new HashMap<>();
     private final Map<String, Object> agentLocks = new HashMap<>();
     private final Map<String, RunningTaskInfo> runningSharedTasks = new HashMap<>();
-
+    private final Map<String, Set<String>> cancelledTasksPerAgent = new HashMap<>();
 
     private boolean dogEating = false;
     private boolean feedDogLocked = false;
-    
-    //SINGLETON
+
     private static final Observer instance = new Observer();
 
     public static Observer getInstance() {
         return instance;
     }
-    private Observer() {
-        // prevent external instantiation
-    }
+    private Observer() {}
 
     public void registerTasks(String agent, List<Task> tasks) {
         taskQueue.put(agent, tasks);
@@ -44,17 +42,26 @@ public class Observer {
         int idx = taskPointers.getOrDefault(agent, 0);
         List<Task> list = taskQueue.get(agent);
 
-        if (idx < list.size()) {
+        while (idx < list.size()) {
             Task task = list.get(idx);
-            taskPointers.put(agent, idx + 1);
-            task.start(agent);
+            if (!isTaskCancelled(agent, task.getName()) && !task.isCompletedBy(agent)) {
+                task.start(agent);
+                taskPointers.put(agent, idx + 1);
+                return;
+            }
+            idx++;
         }
+    }
+
+    public Object getAgentLock(String agentName) {
+        return agentLocks.get(agentName);
     }
 
     public synchronized boolean requestStart(String member, String taskName, boolean isShared, boolean bypassBusyCheck) {
         if (core.GameClock.isSessionOver()) return false;
 
         if (!bypassBusyCheck && busyMembers.contains(member)) return false;
+
 
         if (taskName.equals("Feed Dog") && (feedDogLocked || dogEating)) return false;
         if (taskName.equals("Dog Eat") && !completedGlobalTasks.contains("Feed Dog")) return false;
@@ -76,6 +83,7 @@ public class Observer {
 
         memberToTask.put(member, taskName);
         busyMembers.add(member);
+
 
         if (isShared) {
             sharedTaskParticipants.computeIfAbsent(taskName, k -> new HashSet<>()).add(member);
@@ -99,15 +107,12 @@ public class Observer {
         if (isGloballyCompleting) {
             System.out.println("[OBSERVER] Task '" + taskName + "' is globally completing. Marking as complete.");
             completedGlobalTasks.add(taskName);
-            notifyAllIdleAgents(); // Wake up all idle agents to recheck logic
-
+            notifyAllIdleAgents();
         }
 
         if (taskName.equals("Feed Dog")) {
             System.out.println("[OBSERVER] Unlocking 'Feed Dog'");
             feedDogLocked = false;
-            
-         // 🔔 Notify the dog ONLY (if idle)
             if (!busyMembers.contains("Dog")) {
                 Object dogLock = agentLocks.get("Dog");
                 if (dogLock != null) {
@@ -123,7 +128,6 @@ public class Observer {
             dogEating = false;
         }
 
-        // 🔔 Notify the corresponding agent to wake up and recheck tasks
         Object lock = agentLocks.get(member);
         if (lock != null) {
             System.out.println("[OBSERVER] Notifying agent " + member + " on lock: " + lock);
@@ -133,16 +137,25 @@ public class Observer {
         } else {
             System.out.println("[OBSERVER] No lock found for agent " + member + ". Cannot notify.");
         }
-    }
 
+        if (!taskQueue.containsKey(member)) return;
+
+        int pointer = taskPointers.getOrDefault(member, 0);
+        List<Task> tasks = taskQueue.get(member);
+
+        if (pointer < tasks.size() && tasks.get(pointer).getName().equals(taskName)) {
+            taskPointers.put(member, pointer + 1);
+        }
+    }
 
     public synchronized boolean isMemberBusy(String name) {
         return busyMembers.contains(name);
     }
+
     public void registerAgent(String agentName, Object lock) {
         agentLocks.put(agentName, lock);
     }
-    
+
     private void notifyAllIdleAgents() {
         for (String agentName : agentLocks.keySet()) {
             if (!busyMembers.contains(agentName)) {
@@ -177,7 +190,7 @@ public class Observer {
     public synchronized void removeSharedTask(String taskName) {
         runningSharedTasks.remove(taskName);
     }
-    
+
     public synchronized int getParticipantCount(String taskName) {
         RunningTaskInfo info = runningSharedTasks.get(taskName);
         return (info != null) ? info.getParticipantCount() : 1;
@@ -190,6 +203,82 @@ public class Observer {
         }
         return Set.of();
     }
+
+    public synchronized int getSharedRemainingTime(String taskName) {
+        RunningTaskInfo info = runningSharedTasks.get(taskName);
+        return (info != null) ? info.getRemainingSeconds() : 0;
+    }
+
+    public synchronized boolean isTaskCancelled(String agentName, String taskName) {
+        return cancelledTasksPerAgent.getOrDefault(agentName, Set.of()).contains(taskName);
+    }
+
+    public synchronized void markTaskCancelled(String agentName, String taskName) {
+        cancelledTasksPerAgent.computeIfAbsent(agentName, k -> new HashSet<>()).add(taskName);
+        Object lock = agentLocks.get(agentName);
+        if (lock != null) {
+            synchronized (lock) {
+                lock.notify();
+            }
+        }
+    }
+    
+    public synchronized List<Task> getRemainingTasks(String agentName) {
+        List<Task> all = taskQueue.getOrDefault(agentName, List.of());
+        int pointer = taskPointers.getOrDefault(agentName, 0);
+        return pointer < all.size() ? all.subList(pointer, all.size()) : List.of();
+    }
+    
+    public synchronized void markTaskStartManual(String agent, String taskName) {
+        memberToTask.put(agent, taskName);
+        busyMembers.add(agent);
+    }
+
+    public synchronized void markTaskEndManual(String agent) {
+        memberToTask.remove(agent);
+        busyMembers.remove(agent);
+    }
+    
+    public synchronized void requestShutdownAllTasks() {
+        for (List<Task> taskList : taskQueue.values()) {
+            for (Task task : taskList) {
+                if (task instanceof AbstractTask at) {
+                    at.requestStop();
+                }
+            }
+        }
+        busyMembers.clear();
+        memberToTask.clear();
+        sharedTaskParticipants.clear();
+        runningSharedTasks.clear();
+        System.out.println("[OBSERVER] All tasks shutdown for new day.");
+    }
+    
+    public synchronized void resetState() {
+        completedGlobalTasks.clear();
+        feedDogLocked = false;
+        dogEating = false;
+        busyMembers.clear();
+        memberToTask.clear();
+        sharedTaskParticipants.clear();
+        runningSharedTasks.clear();
+        cancelledTasksPerAgent.clear();
+        taskQueue.clear();
+        taskPointers.clear();
+        System.out.println("[OBSERVER] All session state cleared.");
+    }
+    
+    public synchronized void cancelAllTasks() {
+        for (List<Task> taskList : taskQueue.values()) {
+            for (Task task : taskList) {
+                if (task instanceof AbstractTask at) {
+                    at.cancel(); // 👈 This uses your existing cancel logic
+                }
+            }
+        }
+        System.out.println("[OBSERVER] All tasks cancelled (via cancel()).");
+    }
+
 
 
 

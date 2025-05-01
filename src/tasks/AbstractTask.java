@@ -20,6 +20,12 @@ public abstract class AbstractTask implements Task {
     protected String currentAgent;
     protected List<TaskObserver> observers = new ArrayList<>();
 
+    protected volatile boolean paused = false;
+    protected volatile boolean cancelled = false;
+    protected volatile boolean stopRequested = false;
+    protected int currentProgress = 0;
+    protected final Object lock = new Object();
+
     public AbstractTask(String name, int duration, TaskType type) {
         this.name = name;
         this.duration = duration;
@@ -33,7 +39,9 @@ public abstract class AbstractTask implements Task {
     @Override
     public void start(String agentName) {
         this.currentAgent = agentName;
-        new Thread(this, agentName).start();
+        if (!cancelled) {
+            new Thread(this, agentName).start();
+        }
     }
 
     @Override
@@ -72,13 +80,38 @@ public abstract class AbstractTask implements Task {
     }
 
     @Override
-    public void pause() {}
+    public void pause() {
+        paused = true;
+        System.out.println("[TASK] " + name + " paused.");
+    }
+    
+    public boolean isPaused() {
+        return paused;
+    }
+
 
     @Override
-    public void resume() {}
+    public void resume() {
+        synchronized (lock) {
+            paused = false;
+            lock.notify();
+        }
+    }
 
     @Override
-    public void cancel() {}
+    public void cancel() {
+        cancelled = true;
+        observer.markTaskCancelled(currentAgent, name);
+        synchronized (lock) {
+            lock.notify();
+        }
+        for (TaskObserver obs : observers) {
+            obs.update(name, -1); // indicate cancelled
+        }
+        if (observer != null) {
+            observer.notifyTaskComplete(currentAgent, name, shared, false);
+        }
+    }
 
     @Override
     public void run() {
@@ -88,17 +121,20 @@ public abstract class AbstractTask implements Task {
     protected void runWithNotify(String agentName) {
         String threadName = Thread.currentThread().getName();
         int startTime = GameClock.getSecondsElapsed();
+
+        if (cancelled) return;
+
         System.out.println("[T+" + startTime + "s] " + threadName + " started simple task: " + name);
 
         if (shared && observer.isSharedTaskRunning(name)) {
             RunningTaskInfo info = observer.joinSharedTask(name, agentName);
             System.out.println("[T+" + GameClock.getSecondsElapsed() + "s] " + agentName +
-                " joined shared task: " + name + " (elapsed: " + info.getElapsedSeconds() + ", participants: " + info.getParticipantCount() + ")");
+                    " joined shared task: " + name + " (elapsed: " + info.getElapsedSeconds() + ", participants: " + info.getParticipantCount() + ")");
 
-            // Wait until the shared thread completes
             while (observer.isSharedTaskRunning(name) && !GameClock.isSessionOver()) {
+                if (cancelled) return;
                 try {
-                    Thread.sleep(500); // check every half second
+                    Thread.sleep(500);
                 } catch (InterruptedException e) {
                     return;
                 }
@@ -112,20 +148,28 @@ public abstract class AbstractTask implements Task {
             return;
         }
 
-
-        // This is the agent that owns the actual thread execution
         if (shared) {
             observer.registerRunningTask(name, Thread.currentThread(), duration, agentName);
         }
 
-        double progress = 0.0;
+        while (currentProgress < duration && !GameClock.isSessionOver() && !stopRequested) {
+            if (cancelled) return;
 
-        while (progress < duration && !GameClock.isSessionOver()) {
-            int currentParticipants = shared ? observer.getParticipantCount(name) : 1;
+            synchronized (lock) {
+                while (paused && !cancelled) {
+                    System.out.println("[TASK] " + name + " is paused. Waiting...");
+                    try {
+                        lock.wait();
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+            }
 
-            System.out.println("[T+" + GameClock.getSecondsElapsed() + "s] " + threadName +
-                " doing " + name + ": progress " + String.format("%.2f", progress) +
-                " / " + duration + " (participants: " + currentParticipants + ")");
+            int participants = shared ? observer.getParticipantCount(name) : 1;
+//            System.out.println("[T+" + GameClock.getSecondsElapsed() + "s] " + threadName +
+//                    " doing " + name + ": progress " + currentProgress + " / " + duration +
+//                    " (participants: " + participants + ")");
 
             try {
                 Thread.sleep(1000);
@@ -133,12 +177,15 @@ public abstract class AbstractTask implements Task {
                 return;
             }
 
-            progress += 1.0 * currentParticipants;
+            currentProgress += 1 * participants;
+            int remaining = Math.max(0, duration - currentProgress);
 
             for (TaskObserver obs : observers) {
-                obs.update(name, (int) Math.ceil(duration - progress));
+                obs.update(name, remaining);
             }
         }
+
+        if (cancelled) return;
 
         completedBy.add(agentName);
         System.out.println("[T+" + GameClock.getSecondsElapsed() + "s] " + threadName + " finished task: " + name);
@@ -156,13 +203,17 @@ public abstract class AbstractTask implements Task {
         if (observer != null && isShared()) {
             return observer.getParticipants(name);
         }
-        return Set.of(); // or just empty if not shared
+        return Set.of();
     }
-
-
-
 
     protected boolean isGloballyCompleting() {
         return name.equals("Household") || name.equals("Cook") || name.equals("Do Shopping") || name.equals("Feed Dog");
+    }
+    
+    public void requestStop() {
+        stopRequested = true;
+        synchronized (lock) {
+            lock.notify(); // wake if paused
+        }
     }
 }

@@ -19,4 +19,7 @@ public class GameClock {
     public static boolean isRunning() {
         return !isSessionOver();
     }
+    public static void reset() {
+        startTime = -1;
+    }
 }

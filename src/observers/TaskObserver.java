@@ -1,5 +1,5 @@
 package observers;
 
 public interface TaskObserver {
-    void update(String taskName, int percent);
+	void update(String taskName, int secondsRemaining);
 }

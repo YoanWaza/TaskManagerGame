@@ -1,8 +1,10 @@
 package main;
 
+import core.AgentRegistry; // ✅ Add this import
 import core.GameClock;
 import core.GameTimer;
 import core.Observer;
+import family.Agent;
 import tasks.*;
 import ui.TaskBoxPanel;
 
@@ -29,14 +31,17 @@ public class GameViewPanel extends JPanel {
     private JButton startDayBtn, nextDayBtn;
     private JPanel grid;
     private final Observer observer = core.Observer.getInstance();
+    private final List<Agent> currentAgents = new ArrayList<>();
+    
+
 
     public GameViewPanel(MainFrame frame) {
-    	AbstractTask.setObserver(observer);
+        AbstractTask.setObserver(observer); // ✅ Needed for task logic
         setLayout(new BorderLayout());
         grid = new JPanel(new GridLayout(1, 5));
 
         for (String member : familyMap.keySet()) {
-        	List<Task> tasks = TaskFactory.getRandomTasksForMember(member);
+            List<Task> tasks = TaskFactory.getRandomTasksForMember(member);
             assignedTasks.put(member, tasks);
             JPanel memberPanel = createMemberPanel(member, tasks);
             grid.add(memberPanel);
@@ -76,8 +81,10 @@ public class GameViewPanel extends JPanel {
                     String member = entry.getKey();
                     List<Task> taskList = entry.getValue();
 
-                    family.Agent agent = new family.Agent(member, taskList, observer);
-                    agent.start(); // this triggers the thread and prints log
+                    Agent agent = new Agent(member, taskList, observer);
+                    AgentRegistry.register(member, agent); // Register for TaskBoxPanel to access
+                    agent.start(); // Start agent thread
+                    currentAgents.add(agent); // Track the agent
                 }
             }
         });
@@ -103,11 +110,26 @@ public class GameViewPanel extends JPanel {
     }
 
     private void resetDay() {
+    	observer.resetState();
+        // Stop all running agents
+        for (Agent agent : currentAgents) {
+            agent.stopAgent();  // flag stop
+            agent.interrupt();  // force wake from wait/sleep
+        }
+        currentAgents.clear();
+
+        // Stop task threads
+//        observer.requestShutdownAllTasks();  // we'll implement this below
+        observer.cancelAllTasks();  // 👈 clean, real shutdown
+
+
+        // Reset GUI and state
         assignedTasks.clear();
         grid.removeAll();
-
+        AgentRegistry.clear();
+        
         for (String member : familyMap.keySet()) {
-        	List<Task> tasks = TaskFactory.getRandomTasksForMember(member);
+            List<Task> tasks = TaskFactory.getRandomTasksForMember(member);
             assignedTasks.put(member, tasks);
             JPanel panel = createMemberPanel(member, tasks);
             grid.add(panel);
@@ -120,4 +142,5 @@ public class GameViewPanel extends JPanel {
         startDayBtn.setEnabled(true);
         timerLabel.setText("Time Left: 60s");
     }
+
 }

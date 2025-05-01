@@ -19,6 +19,11 @@ public class RunningTaskInfo {
     public int getElapsedSeconds() {
         return (int)((System.currentTimeMillis() - startTimeMillis) / 1000);
     }
+    
+    public int getRemainingSeconds() {
+        return Math.max(0, originalDuration - getElapsedSeconds());
+    }
+
 
     public void addParticipant(String agentName) {
         participants.add(agentName);
