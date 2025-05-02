@@ -2,8 +2,8 @@ package core;
 
 import tasks.Task;
 import tasks.AbstractTask;
-
 import java.util.*;
+import family.Agent;
 
 public class Observer {
 
@@ -22,7 +22,6 @@ public class Observer {
     private boolean feedDogLocked = false;
 
     private static final Observer instance = new Observer();
-
     public static Observer getInstance() {
         return instance;
     }
@@ -59,24 +58,11 @@ public class Observer {
 
     public synchronized boolean requestStart(String member, String taskName, boolean isShared, boolean bypassBusyCheck) {
         if (core.GameClock.isSessionOver()) return false;
-
         if (!bypassBusyCheck && busyMembers.contains(member)) return false;
-
 
         if (taskName.equals("Feed Dog") && (feedDogLocked || dogEating)) return false;
         if (taskName.equals("Dog Eat") && !completedGlobalTasks.contains("Feed Dog")) return false;
         if (taskName.equals("Eat") && !completedGlobalTasks.contains("Cook")) return false;
-
-        if (taskName.equals("Walk Dog")) {
-            if (member.equals("Dog")) {
-                boolean humanWalking = sharedTaskParticipants.getOrDefault("Walk Dog", Set.of()).stream()
-                        .anyMatch(name -> !name.equals("Dog"));
-                if (!humanWalking) return false;
-            } else {
-                boolean dogAlreadyWalking = sharedTaskParticipants.getOrDefault("Walk Dog", Set.of()).contains("Dog");
-                if (!dogAlreadyWalking && !memberToTask.containsKey("Dog")) return false;
-            }
-        }
 
         if (taskName.equals("Feed Dog")) feedDogLocked = true;
         if (taskName.equals("Dog Eat")) dogEating = true;
@@ -84,10 +70,10 @@ public class Observer {
         memberToTask.put(member, taskName);
         busyMembers.add(member);
 
-
         if (isShared) {
             sharedTaskParticipants.computeIfAbsent(taskName, k -> new HashSet<>()).add(member);
         }
+
         return true;
     }
 
@@ -123,6 +109,7 @@ public class Observer {
                 }
             }
         }
+
         if (taskName.equals("Dog Eat")) {
             System.out.println("[OBSERVER] Marking Dog is no longer eating");
             dogEating = false;
@@ -134,8 +121,6 @@ public class Observer {
             synchronized (lock) {
                 lock.notify();
             }
-        } else {
-            System.out.println("[OBSERVER] No lock found for agent " + member + ". Cannot notify.");
         }
 
         if (!taskQueue.containsKey(member)) return;
@@ -222,13 +207,13 @@ public class Observer {
             }
         }
     }
-    
+
     public synchronized List<Task> getRemainingTasks(String agentName) {
         List<Task> all = taskQueue.getOrDefault(agentName, List.of());
         int pointer = taskPointers.getOrDefault(agentName, 0);
         return pointer < all.size() ? all.subList(pointer, all.size()) : List.of();
     }
-    
+
     public synchronized void markTaskStartManual(String agent, String taskName) {
         memberToTask.put(agent, taskName);
         busyMembers.add(agent);
@@ -238,7 +223,7 @@ public class Observer {
         memberToTask.remove(agent);
         busyMembers.remove(agent);
     }
-    
+
     public synchronized void requestShutdownAllTasks() {
         for (List<Task> taskList : taskQueue.values()) {
             for (Task task : taskList) {
@@ -253,7 +238,7 @@ public class Observer {
         runningSharedTasks.clear();
         System.out.println("[OBSERVER] All tasks shutdown for new day.");
     }
-    
+
     public synchronized void resetState() {
         completedGlobalTasks.clear();
         feedDogLocked = false;
@@ -267,19 +252,15 @@ public class Observer {
         taskPointers.clear();
         System.out.println("[OBSERVER] All session state cleared.");
     }
-    
+
     public synchronized void cancelAllTasks() {
         for (List<Task> taskList : taskQueue.values()) {
             for (Task task : taskList) {
                 if (task instanceof AbstractTask at) {
-                    at.cancel(); // 👈 This uses your existing cancel logic
+                    at.cancel();
                 }
             }
         }
         System.out.println("[OBSERVER] All tasks cancelled (via cancel()).");
     }
-
-
-
-
 }

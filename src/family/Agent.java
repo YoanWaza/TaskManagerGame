@@ -3,7 +3,7 @@ package family;
 import core.GameClock;
 import core.Observer;
 import tasks.Task;
-import tasks.ComplexTask;
+import tasks.AbstractTask;
 
 import java.util.List;
 
@@ -11,8 +11,9 @@ public class Agent extends Thread {
     private final String name;
     private final List<Task> tasks;
     private final Observer observer;
+    private Task currentTask;
 
-    private boolean automaticRun = true; // default mode
+    private boolean automaticRun = true;
     private boolean stop = false;
 
     public Agent(String name, List<Task> tasks, Observer observer) {
@@ -20,6 +21,7 @@ public class Agent extends Thread {
         this.name = name;
         this.tasks = tasks;
         this.observer = observer;
+        observer.registerAgent(name, this); // register for notify()
     }
 
     public void switchToManualMode() {
@@ -38,6 +40,14 @@ public class Agent extends Thread {
         stop = true;
     }
 
+    public Task getCurrentTask() {
+        return currentTask;
+    }
+
+    public void setCurrentTask(Task t) {
+        currentTask = t;
+    }
+
     @Override
     public void run() {
         System.out.println("Agent " + name + " started thread " + Thread.currentThread().getId());
@@ -49,7 +59,7 @@ public class Agent extends Thread {
                 try {
                     synchronized (this) {
                         System.out.println("Agent " + name + " is in manual mode. Waiting...");
-                        wait(); // manual mode → wait until GUI tells us to resume
+                        wait();
                     }
                 } catch (InterruptedException e) {
                     return;
@@ -64,8 +74,8 @@ public class Agent extends Thread {
 
                 boolean canStart = observer.requestStart(name, task.getName(), task.isShared(), false);
                 if (canStart) {
-                	task.start(name); // ✅ let the task start itself, like simple tasks
-
+                    currentTask = task;
+                    task.start(name);
                     didSomething = true;
                     break;
                 }
@@ -73,7 +83,7 @@ public class Agent extends Thread {
 
             if (!didSomething) {
                 try {
-                    Thread.sleep(500); // idle wait
+                    Thread.sleep(500);
                 } catch (InterruptedException e) {
                     break;
                 }
