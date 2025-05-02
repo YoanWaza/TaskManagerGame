@@ -20,6 +20,8 @@ public class Observer {
 
     private boolean dogEating = false;
     private boolean feedDogLocked = false;
+    private boolean isDogWalking = false;
+    private final Set<String> agentsWithWalkingDogTask = new HashSet<>();
 
     private static final Observer instance = new Observer();
     public static Observer getInstance() {
@@ -30,6 +32,9 @@ public class Observer {
     public void registerTasks(String agent, List<Task> tasks) {
         taskQueue.put(agent, tasks);
         taskPointers.put(agent, 0);
+        if (tasks.stream().anyMatch(t -> t.getName().equals("Walk Dog"))) {
+            agentsWithWalkingDogTask.add(agent);
+        }
     }
 
     public void startFirstTask(String agent) {
@@ -60,6 +65,21 @@ public class Observer {
         if (core.GameClock.isSessionOver()) return false;
         if (!bypassBusyCheck && busyMembers.contains(member)) return false;
 
+        if (taskName.equals("Walk Dog")) {
+            if (member.equals("Dog") && !isDogWalking) {
+                isDogWalking = true;
+                notifyAgentsToStartWalkingDog();
+            }
+            else if (!member.equals("Dog") && !isDogWalking) {
+                System.out.println("[OBSERVER] Only Dog can start WalkingDogTask first");
+                return false;
+            }
+            else if (member.equals("Dog") && isDogWalking) {
+                System.out.println("[OBSERVER] Dog already started WalkingDogTask");
+                return false;
+            }
+        }
+
         if (taskName.equals("Feed Dog") && (feedDogLocked || dogEating)) return false;
         if (taskName.equals("Dog Eat") && !completedGlobalTasks.contains("Feed Dog")) return false;
         if (taskName.equals("Eat") && !completedGlobalTasks.contains("Cook")) return false;
@@ -79,6 +99,13 @@ public class Observer {
 
     public synchronized void notifyTaskComplete(String member, String taskName, boolean isShared, boolean isGloballyCompleting) {
         System.out.println("[OBSERVER] Task '" + taskName + "' completed by " + member);
+
+        if (taskName.equals("Walk Dog")) {
+            isDogWalking = false;
+            memberToTask.remove(member);
+            busyMembers.remove(member);
+            System.out.println("[OBSERVER] WalkingDogTask completed by " + member + ", marking as not busy");
+        }
 
         memberToTask.remove(member);
         busyMembers.remove(member);
@@ -243,6 +270,7 @@ public class Observer {
         completedGlobalTasks.clear();
         feedDogLocked = false;
         dogEating = false;
+        isDogWalking = false;
         busyMembers.clear();
         memberToTask.clear();
         sharedTaskParticipants.clear();
@@ -262,5 +290,24 @@ public class Observer {
             }
         }
         System.out.println("[OBSERVER] All tasks cancelled (via cancel()).");
+    }
+
+    private void notifyAgentsToStartWalkingDog() {
+        System.out.println("[OBSERVER] Dog started walking, notifying other agents");
+        for (String agent : agentsWithWalkingDogTask) {
+            if (!agent.equals("Dog")) {
+                Object lock = agentLocks.get(agent);
+                if (lock != null) {
+                    System.out.println("[OBSERVER] Notifying agent " + agent + " to start WalkingDogTask");
+                    synchronized (lock) {
+                        lock.notify();
+                    }
+                }
+            }
+        }
+    }
+
+    public synchronized boolean isDogWalking() {
+        return isDogWalking;
     }
 }

@@ -65,6 +65,49 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
                 return;
             }
 
+            // Special handling for WalkingDogTask
+            if (task.getName().equals("Walk Dog")) {
+                if (memberName.equals("Dog")) {
+                    // Dog can always start WalkingDogTask
+                    if (task instanceof AbstractTask absTask) {
+                        if (absTask.isPaused()) {
+                            absTask.resume();
+                        } else {
+                            // Notify Observer that Dog is starting to walk
+                            Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), false);
+                            task.start(memberName);
+                        }
+                    } else {
+                        // Notify Observer that Dog is starting to walk
+                        Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), false);
+                        task.start(memberName);
+                    }
+                    startBtn.setEnabled(false);
+                    pauseBtn.setEnabled(true);
+                    agent.switchToAutomaticMode();
+                    synchronized (agent) {
+                        agent.notify();
+                    }
+                    return;
+                } else if (!Observer.getInstance().isDogWalking()) {
+                    JOptionPane.showMessageDialog(this, "Only Dog can start WalkingDogTask first!");
+                    return;
+                }
+            }
+
+            // Check if we can start the task through Observer
+            boolean canStart = Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), false);
+            if (!canStart) {
+                if (task.getName().equals("Eat")) {
+                    JOptionPane.showMessageDialog(this, "Cannot start Eat task before Cook is completed!");
+                } else if (task.getName().equals("Dog Eat")) {
+                    JOptionPane.showMessageDialog(this, "Cannot start Dog Eat task before Feed Dog is completed!");
+                } else {
+                    JOptionPane.showMessageDialog(this, "Cannot start this task at the moment!");
+                }
+                return;
+            }
+
             if (task instanceof AbstractTask absTask) {
                 if (absTask.isPaused()) {
                     absTask.resume();
@@ -85,6 +128,10 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
         });
 
         pauseBtn.addActionListener(e -> {
+            if (task.getName().equals("Walk Dog")) {
+                JOptionPane.showMessageDialog(this, "Cannot pause WalkingDogTask!");
+                return;
+            }
             task.pause();
             pauseBtn.setEnabled(false);
             startBtn.setEnabled(true);
@@ -92,12 +139,21 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
         });
 
         cancelBtn.addActionListener(e -> {
+            if (task.getName().equals("Walk Dog")) {
+                JOptionPane.showMessageDialog(this, "Cannot cancel WalkingDogTask!");
+                return;
+            }
             task.cancel();
             progress.setForeground(Color.RED);
             progress.setString(task.getName() + " – canceled");
             Observer.getInstance().markTaskCancelled(memberName, task.getName());
             disableButtons(buttons);
         });
+
+        if (task.getName().equals("Walk Dog")) {
+            pauseBtn.setEnabled(false);
+            cancelBtn.setEnabled(false);
+        }
 
         task.addObserver(this);
     }
