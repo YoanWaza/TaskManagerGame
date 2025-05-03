@@ -10,11 +10,11 @@ import java.util.List;
 public class ComplexTask implements Task {
     private final String name;
     private final List<Task> subtasks = new ArrayList<>();
-    private final List<TaskObserver> observers = new ArrayList<>();
+    protected final List<TaskObserver> observers = new ArrayList<>();
     private boolean started = false;
     private boolean shared = true;
-    private static final Observer observer = core.Observer.getInstance();
-    private String currentAgent;
+    protected static final Observer observer = core.Observer.getInstance();
+    protected String currentAgent;
 
     public ComplexTask(String name) {
         this.name = name;
@@ -22,9 +22,6 @@ public class ComplexTask implements Task {
 
     public void addSubtask(Task t) {
         subtasks.add(t);
-        for (TaskObserver obs : observers) {
-            t.addObserver(obs);  // sync progress bar
-        }
     }
 
     public List<Task> getSubtasks() {
@@ -34,9 +31,6 @@ public class ComplexTask implements Task {
     @Override
     public void addObserver(TaskObserver obs) {
         observers.add(obs);
-        for (Task sub : subtasks) {
-            sub.addObserver(obs);
-        }
     }
 
     @Override
@@ -62,7 +56,6 @@ public class ComplexTask implements Task {
             //  Manually tell observer this subtask is being executed
             observer.markTaskStartManual(currentAgent, sub.getName());
 
-
             sub.start(currentAgent);
 
             while (!sub.isCompletedBy(currentAgent)) {
@@ -75,7 +68,6 @@ public class ComplexTask implements Task {
             }
 
             observer.markTaskEndManual(currentAgent);
-
         }
 
         observer.notifyTaskComplete(currentAgent, name, true, false);
@@ -93,7 +85,7 @@ public class ComplexTask implements Task {
         }
     }
 
-    private String extractAgentNameFromThread() {
+    protected String extractAgentNameFromThread() {
         String threadName = Thread.currentThread().getName();
         return threadName.contains("::") ? threadName.split("::")[0].replace("Agent-", "") : threadName;
     }

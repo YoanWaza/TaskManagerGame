@@ -41,12 +41,7 @@ public class TaskFactory {
             list.add(new EatTask());
             list.add(new FeedDogTask());
             list.add(new HouseholdTask());
-            
-            Task doShop = new DoShoppingTask();
-            Task cook = new CookTask();
-            doShop.markShared();
-            cook.markShared();
-            list.add(createComplexTask("ParentRoutine", List.of(doShop, cook)));
+            list.add(new ParentRoutine());
         }
 
         // Group A (Brother, Sister)

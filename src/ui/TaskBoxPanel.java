@@ -166,10 +166,20 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
                     .filter(name -> !name.equals(memberName))
                     .collect(Collectors.toList());
 
-            if (others.isEmpty()) {
-                label.setText(base + " (shared with nobody)");
+            if (task.getName().equals("ParentRoutine")) {
+                // Special case for ParentRoutine
+                if (others.contains("Mom") || others.contains("Dad")) {
+                    label.setText(base + " (shared with " + (others.contains("Mom") ? "Mom" : "Dad") + ")");
+                } else {
+                    label.setText(base + " (shared with nobody)");
+                }
             } else {
-                label.setText(base + " (shared with " + String.join(", ", others) + ")");
+                // Normal case for other tasks
+                if (others.isEmpty()) {
+                    label.setText(base + " (shared with nobody)");
+                } else {
+                    label.setText(base + " (shared with " + String.join(", ", others) + ")");
+                }
             }
         }
     }
@@ -204,12 +214,14 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
                 progress.setForeground(Color.RED);
                 progress.setString(taskName + " – canceled");
                 disableButtons(buttons);
-            } else if (remaining == 0) {
+            } else if (remaining == 0 && !task.getName().equals("ParentRoutine")) {
+                // Only mark as completed if it's not ParentRoutine
                 progress.setValue(task.getOriginalDuration());
                 progress.setForeground(Color.GREEN);
                 progress.setString(taskName + " – completed");
                 disableButtons(buttons);
             } else {
+                // For ParentRoutine, always update progress based on remaining time
                 progress.setValue(task.getOriginalDuration() - remaining);
                 progress.setForeground(UIManager.getColor("ProgressBar.foreground"));
                 progress.setString(taskName + ": " + remaining + "s left");
