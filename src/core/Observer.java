@@ -63,7 +63,14 @@ public class Observer {
 
     public synchronized boolean requestStart(String member, String taskName, boolean isShared, boolean bypassBusyCheck) {
         if (core.GameClock.isSessionOver()) return false;
-        if (!bypassBusyCheck && busyMembers.contains(member)) return false;
+        
+        // Allow task start if bypassBusyCheck is true (for manual mode) or if member is not busy
+        if (!bypassBusyCheck && busyMembers.contains(member)) {
+            // Special case: allow BeHappy to run simultaneously
+            if (!taskName.equals("Be Happy")) {
+                return false;
+            }
+        }
 
         if (taskName.equals("Walk Dog")) {
             if (member.equals("Dog") && !isDogWalking) {

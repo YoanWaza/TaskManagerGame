@@ -59,12 +59,6 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
 
             Agent agent = AgentRegistry.get(memberName);
 
-            if (agent.isAutomatic() && Observer.getInstance().isMemberBusy(memberName)
-                    && !task.getName().equals("Be Happy")) {
-                JOptionPane.showMessageDialog(this, "Agent is already doing a task. Only 'Be Happy' can run simultaneously.");
-                return;
-            }
-
             // Special handling for WalkingDogTask
             if (task.getName().equals("Walk Dog")) {
                 if (memberName.equals("Dog")) {
@@ -74,12 +68,12 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
                             absTask.resume();
                         } else {
                             // Notify Observer that Dog is starting to walk
-                            Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), false);
+                            Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), true);
                             task.start(memberName);
                         }
                     } else {
                         // Notify Observer that Dog is starting to walk
-                        Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), false);
+                        Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), true);
                         task.start(memberName);
                     }
                     startBtn.setEnabled(false);
@@ -89,14 +83,17 @@ public class TaskBoxPanel extends JPanel implements TaskObserver {
                         agent.notify();
                     }
                     return;
-                } else if (!Observer.getInstance().isDogWalking()) {
+                } else {
                     JOptionPane.showMessageDialog(this, "Only Dog can start WalkingDogTask first!");
                     return;
                 }
             }
 
             // Check if we can start the task through Observer
-            boolean canStart = Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), false);
+            // Use bypassBusyCheck=true if agent is in manual mode or if task is paused
+            boolean bypassBusyCheck = !agent.isAutomatic() || (task instanceof AbstractTask absTask && absTask.isPaused());
+            boolean canStart = Observer.getInstance().requestStart(memberName, task.getName(), task.isShared(), bypassBusyCheck);
+            
             if (!canStart) {
                 if (task.getName().equals("Eat")) {
                     JOptionPane.showMessageDialog(this, "Cannot start Eat task before Cook is completed!");
