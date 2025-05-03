@@ -2,6 +2,7 @@ package main;
 
 import javax.swing.*;
 import java.awt.*;
+import ui.InstructionFrame;
 
 public class WelcomePanel extends JPanel {
     public WelcomePanel(MainFrame frame) {
@@ -49,7 +50,14 @@ public class WelcomePanel extends JPanel {
         add(content); // Add to center of main layout
 
         // Action listener
-        startBtn.addActionListener(e -> frame.setScreen(new GameViewPanel(frame)));
+        startBtn.addActionListener(e -> {
+            // Show instruction frame first
+            InstructionFrame instructionFrame = new InstructionFrame();
+            instructionFrame.setVisible(true);
+            
+            // Then start the game
+            frame.setScreen(new GameViewPanel(frame));
+        });
 
         // Optional: Set background color or image
         setBackground(new Color(245, 245, 245)); // Light gray
