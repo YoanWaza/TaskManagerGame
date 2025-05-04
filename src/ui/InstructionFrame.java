@@ -77,6 +77,10 @@ public class InstructionFrame extends JFrame {
         panel.add(createSectionTitle("🔄 Design Patterns"));
         panel.add(createBulletPoint("• Observer Pattern: Notifies agents of task completion and shared task changes"));
         panel.add(createBulletPoint("• Factory Pattern: TaskFactory generates consistent task sets for agents"));
+        panel.add(createBulletPoint("• Singleton Pattern: Observer class is a singleton."));
+        panel.add(createBulletPoint("• State Pattern: Tasks use state patterns to manage their progress"));
+        panel.add(createBulletPoint("• Adapter Pattern: ParentRoutine is an adapter between ComplexTask and the Task interface"));
+
         panel.add(Box.createVerticalStrut(20));
 
         // Multithreading Section
@@ -93,11 +97,11 @@ public class InstructionFrame extends JFrame {
         panel.add(createBulletPoint("• Observer: Central coordination point for all agents and tasks"));
         panel.add(Box.createVerticalStrut(20));
 
-        // Task Management Section
-        panel.add(createSectionTitle("📋 Task Management"));
-        panel.add(createBulletPoint("• Complex tasks use state machines for progression"));
-        panel.add(createBulletPoint("• Shared tasks use participant counting and time synchronization"));
-        panel.add(createBulletPoint("• Task cancellation and pausing are handled through the Observer"));
+        // // Task Management Section
+        // panel.add(createSectionTitle("📋 Task Management"));
+        // panel.add(createBulletPoint("• Complex tasks use state machines for progression"));
+        // panel.add(createBulletPoint("• Shared tasks use participant counting and time synchronization"));
+        // panel.add(createBulletPoint("• Task cancellation and pausing are handled through the Observer"));
 
         return panel;
     }

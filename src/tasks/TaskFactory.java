@@ -20,11 +20,38 @@ public class TaskFactory {
 //            )));
 //        }
 
-        // Shuffle and select 3 additional tasks (excluding complex one if added)
-        Collections.shuffle(pool);
-        for (Task task : pool) {
-            if (selected.size() >= 4) break;
-            selected.add(task);
+        // Special handling for Dog - ensure WalkingDogTask is included but in random position
+        if (memberName.equals("Dog")) {
+            // Remove WalkingDogTask from pool since we'll add it in a random position
+            pool.removeIf(task -> task.getName().equals("Walk Dog"));
+            
+            // Shuffle remaining tasks
+            Collections.shuffle(pool);
+            
+            // Randomly choose position for WalkingDogTask (0 to 3)
+            int walkingDogPosition = random.nextInt(4);
+            
+            // Add tasks up to the random position
+            for (int i = 0; i < walkingDogPosition; i++) {
+                if (i < pool.size()) {
+                    selected.add(pool.get(i));
+                }
+            }
+            
+            // Add WalkingDogTask at the chosen position
+            selected.add(new WalkingDogTask());
+            
+            // Add remaining tasks
+            for (int i = walkingDogPosition; i < pool.size() && selected.size() < 4; i++) {
+                selected.add(pool.get(i));
+            }
+        } else {
+            // Normal handling for other agents
+            Collections.shuffle(pool);
+            for (Task task : pool) {
+                if (selected.size() >= 4) break;
+                selected.add(task);
+            }
         }
 
         return selected;
